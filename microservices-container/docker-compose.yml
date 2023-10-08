@@ -1,0 +1,89 @@
+version: '3.3'
+services:
+  registry-service:
+    image: registry-service
+    container_name: registry-service
+    build:
+      context: ./registry-service
+      dockerfile: Dockerfile
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://registry-service:8761/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+  api-gateway:
+    image: api-gateway
+    container_name: api-gateway
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    environment:
+      - eureka_client_service-url_defaultZone=http://registry-service:8761/eureka/
+    ports:
+      - "8181:8181"
+    restart: on-failure
+    depends_on:
+      - registry-service
+    links:
+      - registry-service
+  config-service:
+    image: config-service
+    container_name: config-service
+    build:
+      context: ./config-service
+      dockerfile: Dockerfile
+    environment:
+      - eureka_client_service-url_defaultZone=http://registry-service:8761/eureka/
+    ports:
+      - "8888:8888"
+    restart: on-failure
+    depends_on:
+      - registry-service
+    links:
+      - registry-service
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://config-service:8888/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+  auth-service:
+    image: auth-service
+    container_name: auth-service
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    environment:
+      - spring_profiles_active=default
+      - spring_config_import=optional:configserver:http://config-service:8888
+      - eureka_client_service-url_defaultZone=http://registry-service:8761/eureka/
+      - url-internal-service_api-gateway=http://api-gateway:8181
+    ports:
+      - "8081:8081"
+    restart: on-failure
+    depends_on:
+      - registry-service
+      - config-service
+    links:
+      - registry-service
+      - config-service
+  user-service:
+    image: user-service
+    container_name: user-service
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    environment:
+      - spring_profiles_active=default
+      - spring_config_import=optional:configserver:http://config-service:8888
+      - eureka_client_service-url_defaultZone=http://registry-service:8761/eureka/
+    ports:
+      - "8082:8082"
+    restart: on-failure
+    depends_on:
+      - registry-service
+      - config-service
+    links:
+      - registry-service
+      - config-service
